@@ -14,8 +14,10 @@ general-purpose distribution of Kiota.
   `<rid>.zip` for linux-x64, linux-arm64, win-x64, osx-x64 and osx-arm64 in the
   upstream layout, and `SHA256SUMS`. The binary reports `<version>-ksefe.<n>`.
 
-The upstream workflows are disabled in this fork (Settings → Actions), so only
-the release workflow runs.
+Only the release workflow runs here. The upstream workflows trigger on a push to
+`main`, a pull request or a schedule; nothing pushes `main` in this fork, so
+GitHub never registers them. Do not press GitHub's "Sync fork" on `main`: that
+push registers and runs all of them. Fetch upstream locally instead, as below.
 
 ## Patches
 
