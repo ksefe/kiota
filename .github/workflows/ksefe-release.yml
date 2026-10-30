@@ -1,0 +1,91 @@
+# Builds this fork's Kiota and publishes it as a GitHub release, in the same
+# layout as microsoft/kiota's releases (<rid>.zip holding kiota, its pdbs and
+# appsettings.json), plus SHA256SUMS. See KSEFE.md.
+#
+# Runs only for a tag v<upstream version>-ksefe.<n>. The upstream workflows are
+# disabled in this fork, so nothing else runs here.
+name: ksefe release
+
+on:
+  push:
+    tags: ["v*-ksefe.*"]
+
+permissions:
+  contents: read
+
+env:
+  # A frozen release tag must keep building after new advisories appear
+  # (NU1902 is a warning-as-error in Kiota's build).
+  NuGetAudit: "false"
+  DOTNET_NOLOGO: "true"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Check the tag matches the upstream version
+        run: |
+          prefix=$(sed -n 's|.*<VersionPrefix>\(.*\)</VersionPrefix>.*|\1|p' src/kiota/kiota.csproj)
+          case "$GITHUB_REF_NAME" in
+            "v${prefix}-ksefe."*) ;;
+            *) echo "::error::tag $GITHUB_REF_NAME does not start with v${prefix}-ksefe." ; exit 1 ;;
+          esac
+      # KiotaSearcherTests download from apis.guru and GitHub; they test nothing this fork changes.
+      - name: Test the builder
+        run: dotnet test --project tests/Kiota.Builder.Tests/Kiota.Builder.Tests.csproj -f net10.0 -- --filter-not-class Kiota.Builder.Tests.KiotaSearcherTests
+
+  build:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - { rid: linux-x64, os: ubuntu-latest }
+          - { rid: linux-arm64, os: ubuntu-latest }
+          - { rid: win-x64, os: ubuntu-latest }
+          # macOS refuses an unsigned arm64 binary; the SDK signs it (ad hoc) only when publishing on macOS.
+          - { rid: osx-x64, os: macos-latest }
+          - { rid: osx-arm64, os: macos-latest }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Publish
+        shell: bash
+        run: |
+          suffix="${GITHUB_REF_NAME#*-}" # v1.36.1-ksefe.1 -> ksefe.1
+          dotnet publish src/kiota/kiota.csproj -c Release -f net10.0 -r "${{ matrix.rid }}" \
+            --self-contained -p:PublishSingleFile=true -p:VersionSuffix="$suffix" -o out
+      - name: Zip
+        shell: bash
+        run: cd out && zip -q "../${{ matrix.rid }}.zip" ./*
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ matrix.rid }}
+          path: ${{ matrix.rid }}.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum -- *.zip > SHA256SUMS && cat SHA256SUMS
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --latest=false \
+            --notes "Kiota ${GITHUB_REF_NAME%%-*} with the Ksefe SDK's patches. What they are and why: https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/KSEFE.md"
