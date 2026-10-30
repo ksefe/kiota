@@ -148,10 +148,12 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, PythonConventionSe
             if (property.Type is CodeType propertyType)
                 if (propertyType.TypeDefinition is CodeClass && !propertyType.IsCollection)
                 {
-                    var mappedType = parentClass.DiscriminatorInformation.DiscriminatorMappings.FirstOrDefault(x => x.Value.Name.Equals(propertyType.Name, StringComparison.OrdinalIgnoreCase));
-                    if (!string.IsNullOrEmpty(mappedType.Key))
+                    // Several discriminator values can map to the same member.
+                    var mappedKeys = parentClass.DiscriminatorInformation.DiscriminatorMappings.Where(x => x.Value.Name.Equals(propertyType.Name, StringComparison.OrdinalIgnoreCase)).Select(static x => x.Key).Where(static x => !string.IsNullOrEmpty(x)).ToArray();
+                    if (mappedKeys.Length > 0)
                     {
-                        writer.StartBlock($"{(includeElse ? "el" : string.Empty)}if {DiscriminatorMappingVarName} and {DiscriminatorMappingVarName}.casefold() == \"{mappedType.Key.SanitizeDoubleQuote()}\".casefold():");
+                        var condition = string.Join(" or ", mappedKeys.Select(static key => $"{DiscriminatorMappingVarName}.casefold() == \"{key.SanitizeDoubleQuote()}\".casefold()"));
+                        writer.StartBlock($"{(includeElse ? "el" : string.Empty)}if {DiscriminatorMappingVarName} and {(mappedKeys.Length > 1 ? $"({condition})" : condition)}:");
                         _codeUsingWriter.WriteDeferredImport(parentClass, propertyType.Name, writer);
                         writer.WriteLine($"{ResultVarName}.{property.Name} = {propertyType.Name}()");
                         writer.DecreaseIndent();

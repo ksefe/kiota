@@ -1015,10 +1015,11 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, PhpConventionServi
                     CollectionKind = propertyType.CollectionKind,
                     IsNullable = propertyType.IsNullable,
                 };
-            var mappedType = parentClass.DiscriminatorInformation.DiscriminatorMappings.FirstOrDefault(x => x.Value.Name.Equals(propertyType.Name, StringComparison.OrdinalIgnoreCase));
-            if (string.IsNullOrEmpty(mappedType.Key))
+            // Several discriminator values can map to the same member.
+            var mappedKeys = parentClass.DiscriminatorInformation.DiscriminatorMappings.Where(x => x.Value.Name.Equals(propertyType.Name, StringComparison.OrdinalIgnoreCase)).Select(static x => x.Key).Where(static x => !string.IsNullOrEmpty(x)).ToArray();
+            if (mappedKeys.Length == 0)
                 continue;
-            writer.StartBlock($"{(includeElse ? "} else " : string.Empty)}if ('{mappedType.Key.SanitizeSingleQuote()}' === {DiscriminatorMappingVarName}) {{");
+            writer.StartBlock($"{(includeElse ? "} else " : string.Empty)}if ({string.Join(" || ", mappedKeys.Select(static key => $"'{key.SanitizeSingleQuote()}' === {DiscriminatorMappingVarName}"))}) {{");
             writer.WriteLine($"{ResultVarName}->{property.Setter!.Name.ToFirstCharacterLowerCase()}(new {conventions.GetTypeString(propertyType, codeElement, false)}());");
             writer.DecreaseIndent();
             if (!includeElse)

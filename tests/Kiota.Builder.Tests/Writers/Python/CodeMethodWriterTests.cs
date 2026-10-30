@@ -1391,6 +1391,42 @@ public sealed class CodeMethodWriterTests : IDisposable
         Assert.Contains("return result", result);
     }
     [Fact]
+    public void WritesModelFactoryBodyForUnionModelWithSeveralValuesMappedToOneMember()
+    {
+        setup();
+        var wrapper = AddUnionTypeWrapper();
+        var complexType1 = root.FindChildByName<CodeClass>("ComplexType1");
+        Assert.NotNull(complexType1);
+        wrapper.DiscriminatorInformation.AddDiscriminatorMapping("#kiota.complexType1Alias", new CodeType
+        {
+            Name = "ComplexType1",
+            TypeDefinition = complexType1
+        });
+        var factoryMethod = wrapper.AddMethod(new CodeMethod
+        {
+            Name = "factory",
+            Kind = CodeMethodKind.Factory,
+            ReturnType = new CodeType
+            {
+                Name = "UnionTypeWrapper",
+                TypeDefinition = wrapper,
+            },
+        }).First();
+        factoryMethod.AddParameter(new CodeParameter
+        {
+            Name = "parse_node",
+            Kind = CodeParameterKind.ParseNode,
+            Type = new CodeType
+            {
+                Name = "ParseNode"
+            }
+        });
+        writer.Write(factoryMethod);
+        var result = tw.ToString();
+        Assert.Contains("if mapping_value and (mapping_value.casefold() == \"#kiota.complexType1\".casefold() or mapping_value.casefold() == \"#kiota.complexType1Alias\".casefold()):", result);
+        Assert.Contains("result.complex_type1_value = ComplexType1()", result);
+    }
+    [Fact]
     public void WritesModelFactoryBodyForIntersectionModels()
     {
         setup();

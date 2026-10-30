@@ -135,10 +135,11 @@ public class CodeMethodWriter : BaseElementWriter<CodeMethod, CSharpConventionSe
             if (property.Type is CodeType propertyType)
                 if (propertyType.TypeDefinition is CodeClass && !propertyType.IsCollection)
                 {
-                    var mappedType = parentClass.DiscriminatorInformation.DiscriminatorMappings.FirstOrDefault(x => x.Value.Name.Equals(propertyType.Name, StringComparison.OrdinalIgnoreCase));
-                    if (!string.IsNullOrEmpty(mappedType.Key))
+                    // Several discriminator values can map to the same member.
+                    var mappedKeys = parentClass.DiscriminatorInformation.DiscriminatorMappings.Where(x => x.Value.Name.Equals(propertyType.Name, StringComparison.OrdinalIgnoreCase)).Select(static x => x.Key).Where(static x => !string.IsNullOrEmpty(x)).ToArray();
+                    if (mappedKeys.Length > 0)
                     {
-                        writer.WriteLine($"{(includeElse ? "else " : string.Empty)}if(\"{mappedType.Key.SanitizeCSharpDoubleQuote()}\".Equals({DiscriminatorMappingVarName}, StringComparison.OrdinalIgnoreCase))");
+                        writer.WriteLine($"{(includeElse ? "else " : string.Empty)}if({string.Join(" || ", mappedKeys.Select(static key => $"\"{key.SanitizeCSharpDoubleQuote()}\".Equals({DiscriminatorMappingVarName}, StringComparison.OrdinalIgnoreCase)"))})");
                         writer.WriteBlock(lines: $"{ResultVarName}.{property.Name.ToFirstCharacterUpperCase()} = new {conventions.GetTypeString(propertyType, codeElement)}();");
                         includeElse = true;
                     }
