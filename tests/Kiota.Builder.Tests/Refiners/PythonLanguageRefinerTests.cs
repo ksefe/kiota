@@ -121,6 +121,33 @@ public class PythonLanguageRefinerTests
         Assert.Single(model.Properties, x => x.DefaultValue.Equals("field(default_factory=list)"));
     }
 
+    [Fact]
+    public async Task AddsImportForTheEnumDefaultOfAnInheritedPropertyAsync()
+    {
+        var statusEnum = graphNS.AddEnum(new CodeEnum { Name = "submission_status" }).First();
+        var baseModel = graphNS.AddClass(new CodeClass { Name = "submission", Kind = CodeClassKind.Model }).First();
+        baseModel.AddProperty(new CodeProperty
+        {
+            Name = "status",
+            Kind = CodePropertyKind.Custom,
+            Type = new CodeType { Name = "submission_status", TypeDefinition = statusEnum },
+        });
+        var derived = graphNS.AddClass(new CodeClass { Name = "queued_submission", Kind = CodeClassKind.Model }).First();
+        derived.StartBlock.Inherits = new CodeType { Name = "submission", TypeDefinition = baseModel };
+        var inherited = derived.AddProperty(new CodeProperty
+        {
+            Name = "status",
+            Kind = CodePropertyKind.Custom,
+            DefaultValue = "\"queued\"",
+            Type = new CodeType { Name = "submission_status", TypeDefinition = statusEnum },
+        }).First();
+        Assert.True(inherited.ExistsInBaseType);
+
+        await ILanguageRefiner.RefineAsync(new GenerationConfiguration { Language = GenerationLanguage.Python }, root, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Contains(derived.Usings, x => x.Declaration?.TypeDefinition == statusEnum);
+    }
+
     [Theory]
     [InlineData("None")]
     [InlineData("while")]

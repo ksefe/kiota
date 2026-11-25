@@ -25,6 +25,7 @@ push registers and runs all of them. Fetch upstream locally instead, as below.
 | --- | --- | --- |
 | A property typed as a discriminated `oneOf` of objects deserializes through the union's factory, not as its first member | TypeScript | [microsoft/kiota#6615](https://github.com/microsoft/kiota/issues/6615), PR [#8498](https://github.com/microsoft/kiota/pull/8498) |
 | A union wrapper's factory matches every discriminator value mapped to a member, not only the first | C#, Python, PHP | not filed yet |
+| A model that gives an inherited enum property a default (a subtype's discriminator value) imports that enum, instead of raising `NameError` on import | Python | not filed yet |
 
 Each patch carries its tests.
 

@@ -76,6 +76,7 @@ public class PythonRefiner : CommonLanguageRefiner, ILanguageRefiner
             CorrectCoreTypesForBackingStore(generatedCode, "field(default_factory=BackingStoreFactorySingleton(backing_store_factory=None).backing_store_factory.create_backing_store, repr=False)");
             ShortenOversizedNamespaceSegments(generatedCode);
             AddPropertiesAndMethodTypesImports(generatedCode, true, true, true, codeTypeFilter);
+            AddInheritedPropertyDefaultImports(generatedCode);
             AddParsableImplementsForModelClasses(generatedCode, "Parsable");
             cancellationToken.ThrowIfCancellationRequested();
             ReplaceBinaryByNativeType(generatedCode, "bytes", string.Empty, true);
@@ -347,6 +348,30 @@ public class PythonRefiner : CommonLanguageRefiner, ILanguageRefiner
 
     // Caters for QueryParameters and RequestConfiguration which are implemented as nested classes.
     // No imports required for nested classes in Python.
+    /// <summary>
+    /// A model that gives an inherited property a default (a derived type setting its own
+    /// discriminator value) writes that property again, and its default constructs the enum
+    /// in the model's body. The common import step skips inherited properties, so without this
+    /// the enum is never imported and the module raises NameError on import.
+    /// </summary>
+    private static void AddInheritedPropertyDefaultImports(CodeElement currentElement)
+    {
+        if (currentElement is CodeClass currentClass)
+        {
+            var usings = currentClass.Properties
+                .Where(static x => x.ExistsInBaseType && !string.IsNullOrEmpty(x.DefaultValue))
+                .Select(static x => x.Type)
+                .OfType<CodeType>()
+                .Where(static x => x.TypeDefinition is CodeEnum)
+                .Select(static x => (type: x, ns: x.TypeDefinition!.GetImmediateParentOfType<CodeNamespace>()))
+                .Where(static x => x.ns is not null)
+                .Select(static x => new CodeUsing { Name = x.ns!.Name, Declaration = x.type })
+                .ToArray();
+            if (usings.Length != 0)
+                (currentClass.Parent as CodeClass ?? currentClass).AddUsing(usings);
+        }
+        CrawlTree(currentElement, AddInheritedPropertyDefaultImports);
+    }
     public static IEnumerable<CodeTypeBase> codeTypeFilter(IEnumerable<CodeTypeBase> usingsToAdd)
     {
         var nestedTypes = usingsToAdd.OfType<CodeType>().Where(
